@@ -60,6 +60,11 @@ button{cursor:pointer}
 .fgroup select,.fgroup input{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-size:13px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .chips{display:flex;flex-wrap:wrap;gap:5px}
+.rng{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;margin-top:2px}
+.rng span{font-size:12px;color:var(--ink-3)}
+.fgroup .rng input{padding:5px 8px;font-size:12.5px;font-family:var(--f-mono)}
+.fgroup .rng input[aria-invalid="true"]{border-color:var(--bad);background:#fdf1f0}
+.rnghint{font-size:11px;color:var(--ink-3);line-height:1.35}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 9px;font-size:12px;color:var(--ink-2)}
 .chip[aria-pressed="true"]{background:var(--navy-2);border-color:var(--navy-2);color:#fff}
 .reset{border:1px solid var(--line-2);background:transparent;border-radius:6px;padding:7px;font-size:13px;color:var(--ink-2)}
@@ -552,8 +557,12 @@ td .sm.num,.nm .sm{font-family:var(--f-mono);font-size:11px;color:var(--ink-3)}
       <div class="row2"><select id="qFrom" aria-label="From quarter"></select><select id="qTo" aria-label="To quarter"></select></div></div>
     <div class="fgroup" data-f="sector"><label for="fSec">Sector (NAICS)</label><select id="fSec"></select></div>
     <div class="fgroup" data-f="industry"><label for="fInd">Industry (NAICS 6-digit)</label><input id="fInd" list="indList" placeholder="Type to pick an industry"><datalist id="indList"></datalist></div>
-    <div class="fgroup" data-f="revenue"><span class="h">Defendant revenue</span><div class="chips" id="fRev"></div></div>
-    <div class="fgroup" data-f="employees"><span class="h">Defendant employees</span><div class="chips" id="fEmp"></div></div>
+    <div class="fgroup" data-f="revenue"><span class="h">Defendant revenue</span><div class="chips" id="fRev"></div>
+      <div class="rng"><input id="revMin" inputmode="decimal" placeholder="Min" aria-label="Minimum revenue"><span>to</span><input id="revMax" inputmode="decimal" placeholder="Max" aria-label="Maximum revenue"></div>
+      <div class="rnghint" id="revHint">Or type a range. Use K, M or B (500K, 5M, 2.5B).</div></div>
+    <div class="fgroup" data-f="employees"><span class="h">Defendant employees</span><div class="chips" id="fEmp"></div>
+      <div class="rng"><input id="empMin" inputmode="numeric" placeholder="Min" aria-label="Minimum employees"><span>to</span><input id="empMax" inputmode="numeric" placeholder="Max" aria-label="Maximum employees"></div>
+      <div class="rnghint" id="empHint">Or type a headcount range (e.g. 20 to 500).</div></div>
     <div class="fgroup" data-f="type"><span class="h">Case type</span><div class="chips" id="fType"></div></div>
     <div class="fgroup" data-f="outcome"><label for="fOut">Outcome</label><select id="fOut"></select></div>
     <div class="fgroup" data-f="claim"><label for="fClaim">Claim alleged</label><select id="fClaim"></select></div>
@@ -725,7 +734,7 @@ const ALL=[...Array(N).keys()];
 const BASE=stats(ALL);
 
 // ---------- filters ----------
-const F={q:'',from:0,to:quarters.length-1,vert:'',sec:'',ind:'',rev:new Set(),emp:new Set(),type:new Set(),out:'',claim:'',state:'',circ:'',pro:''};
+const F={q:'',from:0,to:quarters.length-1,vert:'',sec:'',ind:'',rev:new Set(),emp:new Set(),revMin:null,revMax:null,empMin:null,empMax:null,type:new Set(),out:'',claim:'',state:'',circ:'',pro:''};
 const $=id=>document.getElementById(id);
 function opts(sel,items,all){sel.innerHTML=`<option value="">${all}</option>`+items.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}
 const countBy=(f)=>{const m={};C.forEach(c=>{const v=c[f];if(v>=0)m[v]=(m[v]||0)+1});return m};
@@ -745,10 +754,41 @@ const stc=countBy(STATE);opts($('fState'),Object.entries(stc).sort((a,b)=>D.stat
 const cc=countBy(CIRC);opts($('fCirc'),Object.entries(cc).sort((a,b)=>parseInt(D.circ[a[0]])-parseInt(D.circ[b[0]])||D.circ[a[0]].localeCompare(D.circ[b[0]])).map(([k,n])=>[k,`${D.circ[k]} (${fmt(n)})`]),'All circuits');
 function chipset(el,items,set,single){el.innerHTML=items.map(([v,l])=>`<button type="button" class="chip" data-v="${esc(v)}" aria-pressed="false">${esc(l)}</button>`).join('');
   el.addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;const v=b.dataset.v;
-    if(single){F.pro=F.pro===v?'':v}else{set.has(v)?set.delete(v):set.add(v)}update()})}
+    if(single){F.pro=F.pro===v?'':v}else{set.has(v)?set.delete(v):set.add(v);if(set===F.rev)F.revMin=F.revMax=null;if(set===F.emp)F.empMin=F.empMax=null}update()})}
 const REVORD=['Under $1M','$1M–$10M','$10M–$50M','$50M–$250M','$250M–$1B','$1B+','Unknown'];
 const EMPORD=['Under 10','10–49','50–249','250–999','1,000–4,999','5,000+','Unknown'];
 chipset($('fRev'),REVORD.map(v=>[D.rev.indexOf(v),v]),F.rev);
+// typed ranges: band bounds are [lo,hi); a case with an exact number is checked exactly, a band-only case matches if its band overlaps the range
+const REVB={'Under $1M':[0,1e6],'$1M–$10M':[1e6,1e7],'$10M–$50M':[1e7,5e7],'$50M–$250M':[5e7,2.5e8],'$250M–$1B':[2.5e8,1e9],'$1B+':[1e9,Infinity]};
+const EMPB_={'Under 10':[0,10],'10–49':[10,50],'50–249':[50,250],'250–999':[250,1000],'1,000–4,999':[1000,5000],'5,000+':[5000,Infinity]};
+const REVBI=D.rev.map(l=>REVB[l]||null),EMPBI=D.emp.map(l=>EMPB_[l]||null);
+function parseRev(s){s=String(s).trim().toLowerCase().replace(/[$,\s]/g,'');if(!s)return null;const m=s.match(/^(\d*\.?\d+)(k|m|mm|b|bn)?$/);if(!m)return NaN;const mul={k:1e3,m:1e6,mm:1e6,b:1e9,bn:1e9}[m[2]]||1;return parseFloat(m[1])*mul}
+function parseEmp(s){s=String(s).trim().toLowerCase().replace(/[,\s]/g,'');if(!s)return null;const m=s.match(/^(\d*\.?\d+)(k)?$/);if(!m)return NaN;return Math.round(parseFloat(m[1])*(m[2]?1e3:1))}
+const empShort=n=>fmt(n);
+function inRange(val,band,lo,hi){
+  if(lo==null&&hi==null)return true;
+  const a=lo==null?-Infinity:lo,b=hi==null?Infinity:hi;
+  if(val!=null)return val>=a&&val<=b;
+  if(!band)return false;               // unknown size never matches a typed range
+  return band[0]<=b&&band[1]>a;
+}
+const bandsInRange=(labels,bounds,lo,hi)=>labels.filter(l=>inRange(null,bounds[l],lo,hi));
+function wireRange(minId,maxId,kMin,kMax,parse,set,hintId){
+  const go=()=>{const a=parse($(minId).value),b=parse($(maxId).value);
+    $(minId).setAttribute('aria-invalid',Number.isNaN(a));$(maxId).setAttribute('aria-invalid',Number.isNaN(b));
+    if(Number.isNaN(a)||Number.isNaN(b)){$(hintId).textContent='Numbers only, e.g. 5M or 250.';return}
+    let lo=a,hi=b;if(lo!=null&&hi!=null&&lo>hi){[lo,hi]=[hi,lo]}
+    F[kMin]=lo;F[kMax]=hi;if(lo!=null||hi!=null)set.clear();update()};
+  [minId,maxId].forEach(id=>{$(id).addEventListener('change',go);$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();go()}})});
+}
+wireRange('revMin','revMax','revMin','revMax',parseRev,F.rev,'revHint');
+wireRange('empMin','empMax','empMin','empMax',parseEmp,F.emp,'empHint');
+const rangeLabel=(lo,hi,f)=>lo!=null&&hi!=null?f(lo)+'–'+f(hi):lo!=null?f(lo)+'+':'up to '+f(hi);
+function syncRanges(){
+  [['revMin','revMax','revMin','revMax',money,'revHint','Or type a range. Use K, M or B (500K, 5M, 2.5B).'],['empMin','empMax','empMin','empMax',empShort,'empHint','Or type a headcount range (e.g. 20 to 500).']].forEach(([a,b,ka,kb,f,hint,def])=>{
+    [[a,ka],[b,kb]].forEach(([id,k])=>{const el=$(id);if(document.activeElement!==el){el.value=F[k]==null?'':f(F[k]);el.setAttribute('aria-invalid','false')}});
+    $(hint).textContent=(F[ka]!=null||F[kb]!=null)?'Exact figures are checked exactly; companies with only a size band count if the band overlaps this range.':def});
+}
 chipset($('fEmp'),EMPORD.map(v=>[D.emp.indexOf(v),v]),F.emp);
 chipset($('fType'),[[D.type.indexOf('class'),'Class action'],[D.type.indexOf('individual'),'Individual']],F.type);
 chipset($('fPro'),[['1','Self-represented'],['0','Has attorney']],null,true);
@@ -767,6 +807,8 @@ function match(c,i,skip){
   if(!noInd&&F.ind&&String(c[IND])!==F.ind)return false;
   if(!noSize&&F.rev.size&&!F.rev.has(String(c[REVT])))return false;
   if(!noSize&&F.emp.size&&!F.emp.has(String(c[EMPB])))return false;
+  if(!noSize&&(F.revMin!=null||F.revMax!=null)&&!inRange(c[REV],REVBI[c[REVT]],F.revMin,F.revMax))return false;
+  if(!noSize&&(F.empMin!=null||F.empMax!=null)&&!inRange(c[EMP],EMPBI[c[EMPB]],F.empMin,F.empMax))return false;
   if(F.type.size&&!F.type.has(String(c[TYPE])))return false;
   if(F.out&&c.b!==F.out)return false;
   if(F.claim!==''&&!(c[FLAGS]>=0&&(c[FLAGS]>>F.claim)&1))return false;
@@ -787,6 +829,8 @@ function activePills(){
   if(F.ind)add(D.ind[F.ind],()=>{F.ind='';$('fInd').value=''});
   F.rev.forEach(v=>add('Revenue '+D.rev[v],()=>F.rev.delete(v)));
   F.emp.forEach(v=>add('Employees '+D.emp[v],()=>F.emp.delete(v)));
+  if(F.revMin!=null||F.revMax!=null)add('Revenue '+rangeLabel(F.revMin,F.revMax,money),()=>{F.revMin=F.revMax=null});
+  if(F.empMin!=null||F.empMax!=null)add('Employees '+rangeLabel(F.empMin,F.empMax,empShort),()=>{F.empMin=F.empMax=null});
   F.type.forEach(v=>add(D.type[v]==='class'?'Class actions':'Individual suits',()=>F.type.delete(v)));
   if(F.out)add(BUCK.find(b=>b[0]===F.out)[1],()=>F.out='');
   if(F.claim!=='')add('Claim: '+CLAIMS[F.claim],()=>F.claim='');
@@ -796,7 +840,7 @@ function activePills(){
   $('active').innerHTML=p.length?p.map((x,i)=>`<span class="pill">${esc(x[0])}<button type="button" data-i="${i}" aria-label="Remove ${esc(x[0])}">×</button></span>`).join(''):'<span class="none"><b>No active filters</b> · showing every case in the federal TCPA dataset</span>';
   $('active').onclick=e=>{const b=e.target.closest('button[data-i]');if(!b)return;p[+b.dataset.i][1]();update()};
 }
-function syncControls(){buildIndList();$('qFrom').value=F.from;$('qTo').value=F.to;$('fSec').value=F.sec;$('fOut').value=F.out;$('fClaim').value=F.claim;$('fState').value=F.state;$('fCirc').value=F.circ;$('fInd').value=F.ind?D.ind[F.ind]:'';syncChips()}
+function syncControls(){buildIndList();$('qFrom').value=F.from;$('qTo').value=F.to;$('fSec').value=F.sec;$('fOut').value=F.out;$('fClaim').value=F.claim;$('fState').value=F.state;$('fCirc').value=F.circ;$('fInd').value=F.ind?D.ind[F.ind]:'';syncChips();syncRanges()}
 
 function update(){
   IDS=[];IDS_Q=[];IDS_GEO=[];
@@ -839,13 +883,15 @@ function riskCalc(indOv){
   if(F.q)return {na:'Clear the name search to see a risk estimate. Risk is calculated for a segment of companies, not for a single name.'};
   const sc=riskScope(indOv);if(!sc.cen)return {na:'Census does not publish company counts for this industry (for example government and some farming), so a risk estimate is not available.'};
   const flags=[];
-  const eSel=[...F.emp].map(v=>D.emp[v]),rSel=[...F.rev].map(v=>D.rev[v]);
+  const eRng=F.empMin!=null||F.empMax!=null,rRng=F.revMin!=null||F.revMax!=null;
+  const eSel=eRng?bandsInRange(EMP6,EMPB_,F.empMin,F.empMax):[...F.emp].map(v=>D.emp[v]),rSel=rRng?bandsInRange(REV6,REVB,F.revMin,F.revMax):[...F.rev].map(v=>D.rev[v]);
+  if(eRng||rRng)flags.push('Census counts companies only in fixed size bands, so your typed range is matched to the bands it overlaps ('+[eRng?eSel.join(', ')+' employees':'',rRng?rSel.join(', ')+' revenue':''].filter(Boolean).join('; ')+'). The company count may be larger than your exact range.');
   if(eSel.includes('Unknown')||rSel.includes('Unknown'))return {na:'Companies of unknown size or revenue cannot be matched to Census counts. Remove "Unknown" from the size filters.'};
   if(rSel.length&&!sc.cen.revOK)return {na:'Census does not publish revenue-size counts for this industry. Use employee size instead.'};
   const ei=eSel.map(b=>EMP6.indexOf(b)),ri=rSel.map(b=>REV6.indexOf(b));
   const cellSum=cen=>{if(ei.length&&ri.length)return ri.reduce((a,r)=>a+ei.reduce((x,c)=>x+cen.joint[r][c],0),0);if(ei.length)return ei.reduce((a,c)=>a+cen.emp[c],0);if(ri.length)return ri.reduce((a,r)=>a+cen.rev[r],0);return cen.tot};
   const firms=cellSum(sc.cen);
-  const sizeLabel=[eSel.length?eSel.join(', ')+' employees':'',rSel.length?rSel.join(', ')+' in revenue':''].filter(Boolean).join(' and ');
+  const sizeLabel=[eRng?rangeLabel(F.empMin,F.empMax,empShort)+' employees':eSel.length?eSel.join(', ')+' employees':'',rRng?rangeLabel(F.revMin,F.revMax,money)+' in revenue':rSel.length?rSel.join(', ')+' in revenue':''].filter(Boolean).join(' and ');
   if(ei.length&&ri.length)flags.push("Estimated company count: Census does not count companies by employee size and revenue together, so the number in both bands is estimated by fitting this industry's exact Census employee and revenue totals (raking).");
   if(eSel.some(b=>b==='50–249'||b==='250–999'))flags.push('The 50–249 and 250–999 bands are estimated: Census reports 200–299 employees as one group, split here using how company counts fall with size in this industry.');
   if(rSel.some(b=>['$50M–$250M','$250M–$1B','$1B+'].includes(b)))flags.push("Revenue above $100M is estimated: Census counts it as one group, split here with a standard size-distribution (Pareto) fit to that group's real company count and revenue.");
@@ -1637,7 +1683,7 @@ $('viewsw').addEventListener('click',e=>{const b=e.target.closest('button[data-v
 window.addEventListener('hashchange',()=>{const h=location.hash;const v=h.startsWith('#defense')?'defense':'risk';const m=h.match(/^#defense-(\w+)/);if(m&&INTENTS.some(x=>x.id===m[1])&&m[1]!==intent){intent=m[1];intentKey=null}if(v!==view)setView(v);else if(v==='defense')renderDefense()});
 
 // ---------- presets ----------
-function resetF(){Object.assign(F,{q:'',from:0,to:quarters.length-1,vert:'',sec:'',ind:'',out:'',claim:'',state:'',circ:'',pro:''});F.rev.clear();F.emp.clear();F.type.clear();$('q').value=''}
+function resetF(){Object.assign(F,{q:'',from:0,to:quarters.length-1,vert:'',sec:'',ind:'',out:'',claim:'',state:'',circ:'',pro:''});F.rev.clear();F.emp.clear();F.type.clear();F.revMin=F.revMax=F.empMin=F.empMax=null;$('q').value=''}
 const PRESETS=[
   ['Electrical contractors, 50–249 employees',()=>{F.ind=String(D.ind.indexOf('Electrical Contractors and Other Wiring Installation Contractors'));F.emp.add(String(D.emp.indexOf('50–249')))},'cases'],
   ['Insurance agencies, $10M–$50M revenue',()=>{F.ind=String(D.ind.indexOf('Insurance Agencies and Brokerages'));F.rev.add(String(D.rev.indexOf('$10M–$50M')))},'company'],
@@ -1657,7 +1703,7 @@ let railOpen=(()=>{if(isNarrow())return false;try{const v=localStorage.getItem('
 function setRail(open,save){railOpen=open;shell.classList.toggle('railclosed',!open);$('showRail').hidden=open;if(save){try{localStorage.setItem('tcpa-rail',open?'open':'closed')}catch(e){}}renderRail()}
 $('hideRail').onclick=()=>setRail(false,true);
 $('showRail').onclick=()=>{setRail(true,true);if(isNarrow())$('rail').scrollIntoView({block:'start'})};
-const FILTER_ACTIVE={quarter:()=>F.from>0||F.to<quarters.length-1,sector:()=>!!F.sec,industry:()=>!!F.ind,revenue:()=>F.rev.size>0,employees:()=>F.emp.size>0,type:()=>F.type.size>0,outcome:()=>!!F.out,claim:()=>F.claim!=='',state:()=>!!F.state,circuit:()=>!!F.circ,pro:()=>F.pro!==''};
+const FILTER_ACTIVE={quarter:()=>F.from>0||F.to<quarters.length-1,sector:()=>!!F.sec,industry:()=>!!F.ind,revenue:()=>F.rev.size>0||F.revMin!=null||F.revMax!=null,employees:()=>F.emp.size>0||F.empMin!=null||F.empMax!=null,type:()=>F.type.size>0,outcome:()=>!!F.out,claim:()=>F.claim!=='',state:()=>!!F.state,circuit:()=>!!F.circ,pro:()=>F.pro!==''};
 const ALLF=Object.keys(FILTER_ACTIVE);
 const CTX={
   'risk':{label:'Risk analysis',f:['quarter','sector','industry','revenue','employees','type','claim','state','circuit'],note:'Filters that shape the risk estimate and segment profile.'},
