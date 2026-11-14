@@ -1728,7 +1728,7 @@ function renderRail(){const c=CTX[railCtxKey()]||CTX.risk;$('railCtx').textConte
   const n=ALLF.filter(f=>FILTER_ACTIVE[f]()).length;$('showRail').textContent=n?`☰ Filters · ${n} active`:'☰ Filters'}
 
 
-$('metaline').textContent=`${fmt(N)} federal TCPA cases · ${quarters[0]} – ${quarters[quarters.length-1]} · Comply iV v1.0`;
+$('metaline').textContent=`${fmt(N)} federal TCPA cases · ${quarters[0]} – ${quarters[quarters.length-1]} · Comply iV Base rate v1.0`;
 {const m=location.hash.match(/^#defense(?:-(\w+))?/);if(m&&m[1]&&INTENTS.some(x=>x.id===m[1]))intent=m[1];}
 if(location.hash.startsWith('#defense')){view='defense';$('viewsw').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v==='defense'));$('riskView').hidden=true;$('defView').hidden=false}
 update();
