@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Request Access · TCPA Base Rate Frequency</title>
+<title>Access · TCPA Base Rate Frequency</title>
 <style>
 :root{--navy:#0e2340;--ink:#0f1a2b;--ink2:#4a5568;--line:#d9dee7;--bg:#f3f5f8;--teal:#0f7f86;--bad:#c23a32;--good:#1a7f4b}
 *{box-sizing:border-box}
@@ -17,61 +17,97 @@ body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--
 p{color:var(--ink2);margin:0 0 16px}
 label{display:block;font-weight:600;margin-bottom:6px}
 input[type=email],input[type=text]:not(.hp){width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;margin-bottom:14px}
-input[type=email]:focus,input[type=text]:focus{outline:2px solid var(--teal);outline-offset:1px}
+input:focus{outline:2px solid var(--teal);outline-offset:1px}
 button{width:100%;background:var(--teal);color:#fff;border:0;border-radius:6px;padding:11px;font:600 15px inherit;cursor:pointer}
 button[disabled]{opacity:.6;cursor:default}
 .hp{position:absolute;left:-9999px}
 .msg{margin:14px 0 0;font-size:14px}.msg.err{color:var(--bad)}.msg.ok{color:var(--good)}
 .note{font-size:12.5px;margin:16px 0 0}
+.link{background:none;border:0;color:var(--teal);padding:0;width:auto;font:inherit;font-size:13px;text-decoration:underline;margin-top:10px}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="head"><h1>TCPA Base Rate Frequency</h1><p>Restricted prototype</p></div>
   <div class="body">
-    <p id="intro">This prototype is invite-only. Enter your details to request access. Once approved, you'll receive a personal link that works for 7 days.</p>
+    <p id="intro">Enter your work email to continue.</p>
     <form id="f" novalidate>
-      <label for="name">Full name</label>
-      <input id="name" type="text" autocomplete="name" required maxlength="100" placeholder="Jane Smith">
-      <label for="role">Role</label>
-      <input id="role" type="text" autocomplete="organization-title" required maxlength="100" placeholder="e.g. Compliance Manager">
       <label for="email">Work email</label>
       <input id="email" type="email" autocomplete="email" required placeholder="you@company.com">
+      <div id="details" hidden>
+        <label for="name">Full name</label>
+        <input id="name" type="text" autocomplete="name" maxlength="100" placeholder="Jane Smith">
+        <label for="role">Role</label>
+        <input id="role" type="text" autocomplete="organization-title" maxlength="100" placeholder="e.g. Compliance Manager">
+      </div>
       <input class="hp" type="text" name="company" id="company" tabindex="-1" autocomplete="off" aria-hidden="true">
-      <button id="b" type="submit">Request access</button>
+      <button id="b" type="submit">Continue</button>
     </form>
+    <button id="other" class="link" type="button" hidden>Not you? Use a different email</button>
     <div id="m" class="msg" role="status" aria-live="polite"></div>
-    <p class="note">Already approved? Open the access link from your email. Access ends automatically after 7 days.</p>
+    <p class="note">First time here? We'll ask for your name and role once. After that, your email is all you need.</p>
   </div>
 </div>
 <script>
-if (new URLSearchParams(location.search).has("expired")) {
-  document.getElementById("intro").textContent = "Your 7-day access has ended. Enter your email to request access again.";
-}
-document.getElementById("f").addEventListener("submit", async function (e) {
-  e.preventDefault();
-  var b = document.getElementById("b"), m = document.getElementById("m");
-  var email = document.getElementById("email").value.trim();
-  var name = document.getElementById("name").value.trim();
-  var role = document.getElementById("role").value.trim();
-  m.className = "msg"; m.textContent = "";
-  if (!name) { m.className = "msg err"; m.textContent = "Please enter your full name."; return; }
-  if (!role) { m.className = "msg err"; m.textContent = "Please enter your role."; return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { m.className = "msg err"; m.textContent = "Please enter a valid email address."; return; }
-  b.disabled = true; b.textContent = "Sending…";
-  try {
-    var r = await fetch("/api/request-access", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name, role: role, email: email, company: document.getElementById("company").value }) });
-    var d = await r.json().catch(function () { return {}; });
-    if (!r.ok) throw new Error(d.error || "Something went wrong. Please try again.");
-    document.getElementById("f").hidden = true;
-    m.className = "msg ok";
-    m.textContent = "Request sent. Once it's approved, you'll receive an email with your 7-day access link.";
-  } catch (err) {
-    m.className = "msg err"; m.textContent = err.message;
-    b.disabled = false; b.textContent = "Request access";
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var q = new URLSearchParams(location.search);
+  var needDetails = false;
+
+  function remembered() {
+    var m = document.cookie.match(/(?:^|;\s*)tcpa_email=([^;]*)/);
+    try { return m ? decodeURIComponent(m[1]) : ""; } catch (e) { return ""; }
   }
-});
+  var saved = remembered();
+  if (saved) {
+    $("email").value = saved;
+    $("intro").textContent = "Welcome back! Click Continue to get in.";
+    $("other").hidden = false;
+  }
+  if (q.has("expired")) $("intro").textContent = "Your 7-day pass has ended. Click Continue to renew it.";
+  if (q.has("revoked")) { $("m").className = "msg err"; $("m").textContent = "Your access has been removed."; }
+
+  $("other").onclick = function () {
+    document.cookie = "tcpa_email=; Max-Age=0; Path=/";
+    $("email").value = ""; $("email").focus(); this.hidden = true;
+    $("intro").textContent = "Enter your work email to continue.";
+  };
+
+  function showDetails() {
+    needDetails = true;
+    $("details").hidden = false;
+    $("name").required = $("role").required = true;
+    $("intro").textContent = "Looks like you're new here. Tell us who you are. You'll only need to do this once.";
+    $("b").textContent = "Get access";
+    $("name").focus();
+  }
+
+  $("f").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var b = $("b"), m = $("m");
+    var email = $("email").value.trim();
+    var name = $("name").value.trim(), role = $("role").value.trim();
+    m.className = "msg"; m.textContent = "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { m.className = "msg err"; m.textContent = "Please enter a valid email address."; return; }
+    if (needDetails && !name) { m.className = "msg err"; m.textContent = "Please enter your full name."; return; }
+    if (needDetails && !role) { m.className = "msg err"; m.textContent = "Please enter your role."; return; }
+    var label = b.textContent;
+    b.disabled = true; b.textContent = "Checking…";
+    try {
+      var r = await fetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email, name: name, role: role, company: $("company").value }) });
+      var d = await r.json().catch(function () { return {}; });
+      if (!r.ok && r.status !== 202) throw new Error(d.error || "Something went wrong. Please try again.");
+      if (d.status === "ok") { b.textContent = "Opening…"; location.replace("/"); return; }
+      if (d.status === "details") { b.disabled = false; showDetails(); return; }
+      if (d.status === "pending") { $("f").hidden = true; $("other").hidden = true; m.className = "msg ok"; m.textContent = d.message; return; }
+      throw new Error("Something went wrong. Please try again.");
+    } catch (err) {
+      m.className = "msg err"; m.textContent = err.message;
+      b.disabled = false; b.textContent = label;
+    }
+  });
+})();
 </script>
 </body>
 </html>
