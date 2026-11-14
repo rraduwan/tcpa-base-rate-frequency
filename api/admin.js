@@ -2,7 +2,7 @@
 // GET  ?t=<admin token>          -> shows the person and the available action
 // POST t=<admin token>&action=…  -> approve | revoke | restore
 // GETs never change anything, so email link-scanners can't revoke or approve by accident.
-import { verify, escapeHtml, siteOrigin } from "../lib/token.js";
+import { verify, escapeHtml, siteOrigin, listUrl } from "../lib/token.js";
 import { storeConfigured, getUser, saveUser } from "../lib/store.js";
 import { page } from "../lib/page.js";
 
@@ -16,7 +16,7 @@ const ACTIONS = {
 const invalid = (msg = "This link is invalid or has expired.") => page("Link invalid", `<h2 class="err">${msg}</h2>`, 400);
 const fmt = (iso) => (iso ? new Date(iso).toUTCString() : "–");
 
-function view(user, t, note = "") {
+function view(user, t, note = "", allLink = "") {
   const buttons = (ACTIONS[user.status] || [])
     .map(([a, label, cls]) => `<form method="post" action="/api/admin" style="display:inline">
 <input type="hidden" name="t" value="${escapeHtml(t)}"><input type="hidden" name="action" value="${a}">
@@ -31,7 +31,8 @@ function view(user, t, note = "") {
 <strong>First seen:</strong> ${fmt(user.createdAt)}<br>
 <strong>Last visit:</strong> ${fmt(user.lastAccess)} · ${user.visits || 0} visit(s)
 </div>
-<div class="row">${buttons}</div>`);
+<div class="row">${buttons}</div>
+${allLink ? `<p style="margin-top:18px"><a href="${escapeHtml(allLink)}" style="color:var(--teal);font-weight:600">View all viewers &rarr;</a></p>` : ""}`);
 }
 
 async function load(t) {
@@ -46,7 +47,7 @@ async function load(t) {
 export async function GET(request) {
   const t = new URL(request.url).searchParams.get("t");
   const { user, error } = await load(t);
-  return error || view(user, t);
+  return error || view(user, t, "", await listUrl(siteOrigin(request), process.env.ACCESS_SECRET));
 }
 
 export async function POST(request) {
@@ -74,5 +75,5 @@ export async function POST(request) {
     note = `<p class="ok">&#10003; Access ${action === "approve" ? "approved" : "restored"}. They can now get in by entering their email.</p>
 <p><a class="btn alt" href="${escapeHtml(mailto)}">Let them know by email</a></p>`;
   }
-  return view(user, t, note);
+  return view(user, t, note, await listUrl(siteOrigin(request), process.env.ACCESS_SECRET));
 }

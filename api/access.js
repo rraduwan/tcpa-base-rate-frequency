@@ -5,7 +5,7 @@
 //   New email, no details    -> { status: "details" } so the page asks for name + role once
 //   New email with details   -> saved; instant access (default) or pending (REQUIRE_APPROVAL=true);
 //                               admin gets an email with a manage link (revoke / approve)
-import { isEmail, escapeHtml, siteOrigin, passCookies, adminToken } from "../lib/token.js";
+import { isEmail, escapeHtml, siteOrigin, passCookies, adminToken, listUrl } from "../lib/token.js";
 import { storeConfigured, getUser, saveUser } from "../lib/store.js";
 import { sendMail, ADMIN_EMAIL } from "../lib/mail.js";
 
@@ -20,6 +20,7 @@ function json(obj, status = 200, cookies = []) {
 
 async function notifyAdmin(request, user, kind) {
   const link = `${siteOrigin(request)}/api/admin?t=${encodeURIComponent(await adminToken(user.email, process.env.ACCESS_SECRET))}`;
+  const all = await listUrl(siteOrigin(request), process.env.ACCESS_SECRET);
   const country = request.headers.get("x-vercel-ip-country") || "unknown";
   let city = "unknown";
   try { city = decodeURIComponent(request.headers.get("x-vercel-ip-city") || "") || "unknown"; } catch {}
@@ -30,10 +31,11 @@ async function notifyAdmin(request, user, kind) {
   return sendMail({
     to: ADMIN_EMAIL,
     subject: `${pending ? "Access request" : "New viewer"}: ${user.name} (${user.role}) – ${user.email}`,
-    text: `${user.name} ${headline} the TCPA Base Rate Frequency.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\n${pending ? "Review and approve" : "Revoke access any time"}:\n${link}\n`,
+    text: `${user.name} ${headline} the TCPA Base Rate Frequency.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\n${pending ? "Review and approve" : "Revoke access any time"}:\n${link}\n\nView all viewers:\n${all}\n`,
     html: `<p><strong>${escapeHtml(user.name)}</strong> ${headline} the TCPA Base Rate Frequency.</p>
 <table style="border-collapse:collapse;margin:0 0 14px">${rows.map(([k, v]) => `<tr><td style="color:#555;padding:2px 14px 2px 0">${k}</td><td>${escapeHtml(v)}</td></tr>`).join("")}</table>
-<p><a href="${escapeHtml(link)}" style="background:${pending ? "#0f7f86" : "#c23a32"};color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">${button}</a></p>
+<p><a href="${escapeHtml(link)}" style="background:${pending ? "#0f7f86" : "#c23a32"};color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">${button}</a>
+&nbsp; <a href="${escapeHtml(all)}" style="color:#0f7f86;font-weight:600">View all viewers &rarr;</a></p>
 <p style="color:#555;font-size:13px">${pending ? "Ignore this email to deny." : "They can keep coming back with just their email until you revoke them."}</p>`,
   });
 }
