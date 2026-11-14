@@ -13,7 +13,8 @@ export async function GET(request) {
   const req = await verify(t, process.env.ACCESS_SECRET, "req");
   if (!req) return invalid();
   return page("Approve access", `<h2>Approve access?</h2>
-<p><strong>${escapeHtml(req.e)}</strong> asked to view the TCPA Base Rate Frequency.</p>
+<p>This person asked to view the TCPA Base Rate Frequency:</p>
+<div class="box">${req.n ? `<strong>${escapeHtml(req.n)}</strong><br>${escapeHtml(req.r || "")}<br>` : ""}${escapeHtml(req.e)}</div>
 <p>Approving gives them <strong>${ACCESS_DAYS} days</strong> of access. It ends automatically after that.</p>
 <form method="post" action="/api/approve"><input type="hidden" name="t" value="${escapeHtml(t)}">
 <button class="btn" type="submit">Approve for ${ACCESS_DAYS} days</button></form>`);
@@ -31,11 +32,12 @@ export async function POST(request) {
   const until = new Date(expires).toUTCString();
 
   const subject = "Your access to the TCPA Base Rate Frequency";
-  const body = `Hi,\n\nYou now have ${ACCESS_DAYS}-day access to the TCPA Base Rate Frequency.\n\nOpen this link to get in (valid until ${until}):\n${link}\n\nPlease keep this link to yourself; it was issued to ${req.e}.\n`;
+  const first = req.n ? req.n.split(" ")[0] : "";
+  const body = `Hi${first ? " " + first : ""},\n\nYou now have ${ACCESS_DAYS}-day access to the TCPA Base Rate Frequency.\n\nOpen this link to get in (valid until ${until}):\n${link}\n\nPlease keep this link to yourself; it was issued to ${req.e}.\n`;
   const mailto = `mailto:${encodeURIComponent(req.e)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
   return page("Access approved", `<h2>Approved &#10003;</h2>
-<p><strong>${escapeHtml(req.e)}</strong> has access until <strong>${escapeHtml(until)}</strong>.</p>
+<p><strong>${escapeHtml(req.n ? `${req.n} (${req.e})` : req.e)}</strong> has access until <strong>${escapeHtml(until)}</strong>.</p>
 <p>Send them their personal access link:</p>
 <div class="row" style="margin-bottom:14px">
   <a class="btn" href="${escapeHtml(mailto)}">Email access link</a>

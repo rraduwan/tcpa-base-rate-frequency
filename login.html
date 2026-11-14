@@ -16,8 +16,8 @@ body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--
 .body{padding:24px}
 p{color:var(--ink2);margin:0 0 16px}
 label{display:block;font-weight:600;margin-bottom:6px}
-input[type=email]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;margin-bottom:14px}
-input[type=email]:focus{outline:2px solid var(--teal);outline-offset:1px}
+input[type=email],input[type=text]:not(.hp){width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;margin-bottom:14px}
+input[type=email]:focus,input[type=text]:focus{outline:2px solid var(--teal);outline-offset:1px}
 button{width:100%;background:var(--teal);color:#fff;border:0;border-radius:6px;padding:11px;font:600 15px inherit;cursor:pointer}
 button[disabled]{opacity:.6;cursor:default}
 .hp{position:absolute;left:-9999px}
@@ -29,8 +29,12 @@ button[disabled]{opacity:.6;cursor:default}
 <div class="card">
   <div class="head"><h1>TCPA Base Rate Frequency</h1><p>Restricted prototype</p></div>
   <div class="body">
-    <p id="intro">This prototype is invite-only. Enter your work email to request access. Once approved, you'll receive a personal link that works for 7 days.</p>
+    <p id="intro">This prototype is invite-only. Enter your details to request access. Once approved, you'll receive a personal link that works for 7 days.</p>
     <form id="f" novalidate>
+      <label for="name">Full name</label>
+      <input id="name" type="text" autocomplete="name" required maxlength="100" placeholder="Jane Smith">
+      <label for="role">Role</label>
+      <input id="role" type="text" autocomplete="organization-title" required maxlength="100" placeholder="e.g. Compliance Manager">
       <label for="email">Work email</label>
       <input id="email" type="email" autocomplete="email" required placeholder="you@company.com">
       <input class="hp" type="text" name="company" id="company" tabindex="-1" autocomplete="off" aria-hidden="true">
@@ -48,12 +52,16 @@ document.getElementById("f").addEventListener("submit", async function (e) {
   e.preventDefault();
   var b = document.getElementById("b"), m = document.getElementById("m");
   var email = document.getElementById("email").value.trim();
+  var name = document.getElementById("name").value.trim();
+  var role = document.getElementById("role").value.trim();
   m.className = "msg"; m.textContent = "";
+  if (!name) { m.className = "msg err"; m.textContent = "Please enter your full name."; return; }
+  if (!role) { m.className = "msg err"; m.textContent = "Please enter your role."; return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { m.className = "msg err"; m.textContent = "Please enter a valid email address."; return; }
   b.disabled = true; b.textContent = "Sending…";
   try {
     var r = await fetch("/api/request-access", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email, company: document.getElementById("company").value }) });
+      body: JSON.stringify({ name: name, role: role, email: email, company: document.getElementById("company").value }) });
     var d = await r.json().catch(function () { return {}; });
     if (!r.ok) throw new Error(d.error || "Something went wrong. Please try again.");
     document.getElementById("f").hidden = true;
