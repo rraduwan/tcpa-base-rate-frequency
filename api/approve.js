@@ -13,7 +13,7 @@ export async function GET(request) {
   const req = await verify(t, process.env.ACCESS_SECRET, "req");
   if (!req) return invalid();
   return page("Approve access", `<h2>Approve access?</h2>
-<p><strong>${escapeHtml(req.e)}</strong> asked to view the TCPA Case Explorer.</p>
+<p><strong>${escapeHtml(req.e)}</strong> asked to view the TCPA Base Rate Frequency.</p>
 <p>Approving gives them <strong>${ACCESS_DAYS} days</strong> of access. It ends automatically after that.</p>
 <form method="post" action="/api/approve"><input type="hidden" name="t" value="${escapeHtml(t)}">
 <button class="btn" type="submit">Approve for ${ACCESS_DAYS} days</button></form>`);
@@ -30,8 +30,8 @@ export async function POST(request) {
   const link = `${siteOrigin(request)}/api/enter?t=${encodeURIComponent(acc)}`;
   const until = new Date(expires).toUTCString();
 
-  const subject = "Your access to the TCPA Case Explorer";
-  const body = `Hi,\n\nYou now have ${ACCESS_DAYS}-day access to the TCPA Case Explorer.\n\nOpen this link to get in (valid until ${until}):\n${link}\n\nPlease keep this link to yourself; it was issued to ${req.e}.\n`;
+  const subject = "Your access to the TCPA Base Rate Frequency";
+  const body = `Hi,\n\nYou now have ${ACCESS_DAYS}-day access to the TCPA Base Rate Frequency.\n\nOpen this link to get in (valid until ${until}):\n${link}\n\nPlease keep this link to yourself; it was issued to ${req.e}.\n`;
   const mailto = `mailto:${encodeURIComponent(req.e)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
   return page("Access approved", `<h2>Approved &#10003;</h2>

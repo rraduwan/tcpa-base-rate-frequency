@@ -34,8 +34,8 @@ export async function POST(request) {
       from: FROM_EMAIL,
       to: [ADMIN_EMAIL],
       subject: `Access request: ${email}`,
-      text: `${email} requested access to the TCPA Case Explorer.\n\nLocation: ${city}, ${country}\nTime: ${when}\n\nReview and approve (7-day access):\n${approveUrl}\n\nIgnore this email to deny.`,
-      html: `<p><strong>${escapeHtml(email)}</strong> requested access to the TCPA Case Explorer.</p>
+      text: `${email} requested access to the TCPA Base Rate Frequency.\n\nLocation: ${city}, ${country}\nTime: ${when}\n\nReview and approve (7-day access):\n${approveUrl}\n\nIgnore this email to deny.`,
+      html: `<p><strong>${escapeHtml(email)}</strong> requested access to the TCPA Base Rate Frequency.</p>
 <p style="color:#555">Location: ${escapeHtml(city)}, ${escapeHtml(country)}<br>Time: ${escapeHtml(when)}</p>
 <p><a href="${escapeHtml(approveUrl)}" style="background:#0f7f86;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">Review &amp; approve (7 days)</a></p>
 <p style="color:#555">Ignore this email to deny. The link expires in 7 days.</p>`,
