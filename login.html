@@ -16,11 +16,10 @@ body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--
 .body{padding:24px}
 p{color:var(--ink2);margin:0 0 16px}
 label{display:block;font-weight:600;margin-bottom:6px}
-input[type=email],input[type=text]:not(.hp){width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;margin-bottom:14px}
+input[type=email],input[type=text]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;margin-bottom:14px}
 input:focus{outline:2px solid var(--teal);outline-offset:1px}
 button{width:100%;background:var(--teal);color:#fff;border:0;border-radius:6px;padding:11px;font:600 15px inherit;cursor:pointer}
 button[disabled]{opacity:.6;cursor:default}
-.hp{position:absolute;left:-9999px}
 .msg{margin:14px 0 0;font-size:14px}.msg.err{color:var(--bad)}.msg.ok{color:var(--good)}
 .note{font-size:12.5px;margin:16px 0 0}
 .link{background:none;border:0;color:var(--teal);padding:0;width:auto;font:inherit;font-size:13px;text-decoration:underline;margin-top:10px}
@@ -40,7 +39,6 @@ button[disabled]{opacity:.6;cursor:default}
         <label for="role">Role</label>
         <input id="role" type="text" autocomplete="organization-title" maxlength="100" placeholder="e.g. Compliance Manager">
       </div>
-      <input class="hp" type="text" name="company" id="company" tabindex="-1" autocomplete="off" aria-hidden="true">
       <button id="b" type="submit">Continue</button>
     </form>
     <button id="other" class="link" type="button" hidden>Not you? Use a different email</button>
@@ -95,11 +93,15 @@ button[disabled]{opacity:.6;cursor:default}
     b.disabled = true; b.textContent = "Checking…";
     try {
       var r = await fetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email, name: name, role: role, company: $("company").value }) });
+        body: JSON.stringify({ email: email, name: name, role: role}) });
       var d = await r.json().catch(function () { return {}; });
       if (!r.ok && r.status !== 202) throw new Error(d.error || "Something went wrong. Please try again.");
       if (d.status === "ok") { b.textContent = "Opening…"; location.replace("/"); return; }
-      if (d.status === "details") { b.disabled = false; showDetails(); return; }
+      if (d.status === "details") {
+        b.disabled = false;
+        if (needDetails) throw new Error("We couldn't save your details. Please check your name and role and try again.");
+        showDetails(); return;
+      }
       if (d.status === "pending") { $("f").hidden = true; $("other").hidden = true; m.className = "msg ok"; m.textContent = d.message; return; }
       throw new Error("Something went wrong. Please try again.");
     } catch (err) {

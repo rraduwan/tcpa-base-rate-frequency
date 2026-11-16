@@ -43,7 +43,6 @@ async function notifyAdmin(request, user, kind) {
 export async function POST(request) {
   let data;
   try { data = await request.json(); } catch { return json({ error: "Bad request." }, 400); }
-  if (data.company) return json({ status: "details" }); // honeypot: bots get nowhere
 
   const email = String(data.email || "").trim().toLowerCase();
   if (!isEmail(email)) return json({ error: "Please enter a valid email address." }, 400);
