@@ -48,7 +48,7 @@ function table(users, t, notice) {
 <td class="num">${u.visits || 0}</td>
 <td>${act ? `<form method="post" action="/api/viewers"><input type="hidden" name="t" value="${escapeHtml(t)}">
 <input type="hidden" name="email" value="${escapeHtml(u.email)}"><input type="hidden" name="action" value="${act[0]}">
-<button class="sm${act[2] ? " danger" : ""}" type="submit"${act[0] === "revoke" ? ` onclick="return confirm('Revoke access for ${escapeHtml(u.email).replace(/'/g, "")}?')"` : ""}>${act[1]}</button></form>` : ""}</td>
+<button class="sm${act[2] ? " danger" : ""}" type="submit"${act[0] === "revoke" ? ` onclick="return confirm('Revoke access for ' + this.form.email.value + '?')"` : ""}>${act[1]}</button></form>` : ""}</td>
 </tr>`;
   }).join("");
 

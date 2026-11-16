@@ -65,6 +65,11 @@ button[disabled]{opacity:.6;cursor:default}
   if (q.has("expired")) $("intro").textContent = "Your 7-day pass has ended. Click Continue to renew it.";
   if (q.has("revoked")) { $("m").className = "msg err"; $("m").textContent = "Your access has been removed."; }
 
+  if (saved && q.has("expired")) {
+    $("intro").textContent = "Welcome back! Renewing your access…";
+    setTimeout(function () { $("f").requestSubmit ? $("f").requestSubmit() : $("b").click(); }, 50);
+  }
+
   $("other").onclick = function () {
     document.cookie = "tcpa_email=; Max-Age=0; Path=/";
     $("email").value = ""; $("email").focus(); this.hidden = true;
@@ -96,7 +101,12 @@ button[disabled]{opacity:.6;cursor:default}
         body: JSON.stringify({ email: email, name: name, role: role}) });
       var d = await r.json().catch(function () { return {}; });
       if (!r.ok && r.status !== 202) throw new Error(d.error || "Something went wrong. Please try again.");
-      if (d.status === "ok") { b.textContent = "Opening…"; location.replace("/"); return; }
+      if (d.status === "ok") {
+        if (!/(?:^|;\s*)tcpa_email=/.test(document.cookie)) {
+          throw new Error("Your browser blocked the sign-in cookie. Please allow cookies for this site (or try Chrome, Edge or Safari) and click again.");
+        }
+        b.textContent = "Opening…"; location.replace("/"); return;
+      }
       if (d.status === "details") {
         b.disabled = false;
         if (needDetails) throw new Error("We couldn't save your details. Please check your name and role and try again.");

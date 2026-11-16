@@ -6,7 +6,7 @@
 //   New email with details   -> saved; instant access (default) or pending (REQUIRE_APPROVAL=true);
 //                               admin gets an email with a manage link (revoke / approve)
 import { isEmail, escapeHtml, siteOrigin, passCookies, adminToken, listUrl } from "../lib/token.js";
-import { storeConfigured, getUser, saveUser } from "../lib/store.js";
+import { storeConfigured, getUser, saveUser, hit } from "../lib/store.js";
 import { sendMail, ADMIN_EMAIL } from "../lib/mail.js";
 
 const requireApproval = () => String(process.env.REQUIRE_APPROVAL || "").toLowerCase() === "true";
@@ -40,19 +40,48 @@ async function notifyAdmin(request, user, kind) {
   });
 }
 
+// Cap admin emails per network so a flood of fake sign-ups can't burn the email quota.
+// Generous on purpose: a whole office behind one corporate IP is never affected in practice,
+// and the visitor always gets in either way; only the notification is skipped.
+const NOTIFY_PER_IP_PER_HOUR = 20;
+async function notifyCapped(request, user, kind) {
+  const ip = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+  try {
+    if ((await hit(`rl:notify:${ip}`, 3600)) > NOTIFY_PER_IP_PER_HOUR) {
+      console.warn("notify cap reached for", ip, user.email);
+      return false;
+    }
+  } catch {} // counter unavailable: just send
+  return notifyAdmin(request, user, kind);
+}
+
 export async function POST(request) {
   let data;
   try { data = await request.json(); } catch { return json({ error: "Bad request." }, 400); }
 
   const email = String(data.email || "").trim().toLowerCase();
   if (!isEmail(email)) return json({ error: "Please enter a valid email address." }, 400);
-  if (!process.env.ACCESS_SECRET || !storeConfigured()) {
+  if (!process.env.ACCESS_SECRET) {
     return json({ error: "Access is not configured yet. Please try again later." }, 503);
+  }
+  const name = clean(data.name);
+  const role = clean(data.role);
+  const letIn = async (n) => json({ status: "ok", name: n }, 200, await passCookies(email, process.env.ACCESS_SECRET));
+
+  let user;
+  try {
+    if (!storeConfigured()) throw new Error("store not configured");
+    user = await getUser(email);
+  } catch (err) {
+    // Database outage: never lock clients out. Let them in; revocation is still enforced
+    // on every page view as soon as the database is back.
+    console.error("access: store unavailable, letting visitor in", err);
+    if (!name || !role) return json({ status: "details" });
+    await notifyAdmin(request, { email, name, role }, "new").catch(() => false);
+    return letIn(name);
   }
 
   try {
-    const user = await getUser(email);
-
     if (user) {
       if (user.status === "revoked") {
         return json({ error: `Your access has been removed. Contact ${ADMIN_EMAIL} if you think this is a mistake.` }, 403);
@@ -62,29 +91,27 @@ export async function POST(request) {
       }
       user.lastAccess = new Date().toISOString();
       user.visits = (user.visits || 0) + 1;
-      await saveUser(user);
-      return json({ status: "ok", name: user.name }, 200, await passCookies(email, process.env.ACCESS_SECRET));
+      await saveUser(user).catch((err) => console.error("access: visit not recorded", err));
+      return letIn(user.name);
     }
 
     // New visitor: collect name + role once.
-    const name = clean(data.name);
-    const role = clean(data.role);
     if (!name || !role) return json({ status: "details" });
 
     const now = new Date().toISOString();
     const newUser = { email, name, role, status: requireApproval() ? "pending" : "active", createdAt: now, lastAccess: now, visits: 1 };
 
     if (newUser.status === "pending") {
-      if (!(await notifyAdmin(request, newUser, "pending"))) {
+      if (!(await notifyCapped(request, newUser, "pending"))) {
         return json({ error: "Could not send your request. Please try again later." }, 502);
       }
       await saveUser(newUser);
       return json({ status: "pending", message: "Request sent. You'll be able to get in with just your email once it's approved." }, 202);
     }
 
-    await saveUser(newUser);
-    await notifyAdmin(request, newUser, "new"); // a mail failure doesn't block the visitor
-    return json({ status: "ok", name }, 200, await passCookies(email, process.env.ACCESS_SECRET));
+    await saveUser(newUser).catch((err) => console.error("access: new viewer not saved", err));
+    await notifyCapped(request, newUser, "new"); // a mail failure doesn't block the visitor
+    return letIn(name);
   } catch (err) {
     console.error("access error", err);
     return json({ error: "Something went wrong. Please try again in a moment." }, 500);
